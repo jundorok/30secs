@@ -1,0 +1,65 @@
+[project]
+name = "30secs"
+version = "0.1.0"
+description = "Collect and expose lightweight system snapshots (CLI + AWS Lambda handler)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "psutil>=5.9.8",
+]
+
+[project.scripts]
+30secs = "thirtysecs.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "thirtysecs"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.2.0",
+  "pytest-cov>=5.0.0",
+  "ruff>=0.6.0",
+  "mypy>=1.10.0",
+  "types-psutil>=5.9.5.20240516",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "I",
+  "B",
+  "UP",
+  "SIM",
+  "RUF",
+]
+ignore = [
+  "E501",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["psutil.*"]
+ignore_missing_imports = true
