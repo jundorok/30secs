@@ -16,13 +16,45 @@
 
 ## Installation
 
-### Install uv (official docs)
+### Binary (No Python Required) - Recommended for K8s Nodes
+
+Download the pre-built binary for your platform:
+
+```bash
+# Linux AMD64 (most K8s nodes)
+curl -L https://github.com/<your-repo>/30secs/releases/latest/download/30secs-linux-amd64 -o 30secs
+
+# Linux ARM64 (Graviton, etc.)
+curl -L https://github.com/<your-repo>/30secs/releases/latest/download/30secs-linux-arm64 -o 30secs
+
+# macOS Apple Silicon
+curl -L https://github.com/<your-repo>/30secs/releases/latest/download/30secs-darwin-arm64 -o 30secs
+
+# macOS Intel
+curl -L https://github.com/<your-repo>/30secs/releases/latest/download/30secs-darwin-amd64 -o 30secs
+
+# Make executable and run
+chmod +x 30secs
+./30secs watch -f table --alerts
+```
+
+#### One-liner for K8s Node Debugging
+
+```bash
+curl -sL https://github.com/<your-repo>/30secs/releases/latest/download/30secs-linux-amd64 -o /tmp/30secs \
+  && chmod +x /tmp/30secs \
+  && /tmp/30secs watch -f table --alerts -i 10
+```
+
+### From Source (uv)
+
+#### Install uv (official docs)
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Install/sync dependencies
+#### Install/sync dependencies
 
 ```bash
 uv sync

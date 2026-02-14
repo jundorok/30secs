@@ -1,0 +1,80 @@
+name: Version Bump
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    # Skip if commit is from version bump (prevent infinite loop)
+    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get current version
+        id: current
+        run: |
+          VERSION=$(grep -m1 'version = ' pyproject.toml | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Determine bump type from commit messages
+        id: bump
+        run: |
+          # Check recent commit messages for bump hints
+          COMMITS=$(git log --oneline -10)
+
+          if echo "$COMMITS" | grep -qiE "(breaking|major|!:)"; then
+            echo "type=major" >> $GITHUB_OUTPUT
+          elif echo "$COMMITS" | grep -qiE "(feat|feature|minor)"; then
+            echo "type=minor" >> $GITHUB_OUTPUT
+          else
+            echo "type=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Calculate new version
+        id: new
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          BUMP_TYPE="${{ steps.bump.outputs.type }}"
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case $BUMP_TYPE in
+            major)
+              NEW_VERSION="$((MAJOR + 1)).0.0"
+              ;;
+            minor)
+              NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
+              ;;
+            patch)
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+              ;;
+          esac
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumping $CURRENT -> $NEW_VERSION ($BUMP_TYPE)"
+
+      - name: Update version in pyproject.toml
+        run: |
+          sed -i "s/version = \"${{ steps.current.outputs.version }}\"/version = \"${{ steps.new.outputs.version }}\"/" pyproject.toml
+
+      - name: Update version in __init__.py
+        run: |
+          sed -i "s/__version__ = \"${{ steps.current.outputs.version }}\"/__version__ = \"${{ steps.new.outputs.version }}\"/" src/thirtysecs/__init__.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml src/thirtysecs/__init__.py
+          git commit -m "chore: bump version to ${{ steps.new.outputs.version }}" || exit 0
+          git push
