@@ -1,14 +1,6 @@
 """Tests for alert system and memory leak detection."""
 
-import pytest
-
-from thirtysecs.alerts import (
-    Alert,
-    AlertChecker,
-    AlertRule,
-    MemoryLeakDetector,
-    get_default_alert_checker,
-)
+from thirtysecs.alerts import AlertChecker, AlertRule, MemoryLeakDetector, get_default_alert_checker
 from thirtysecs.config import settings
 
 
@@ -188,4 +180,3 @@ class TestAlertCheckerWithLeakDetection:
         # After enough samples, leak should be detected
         leak_alerts = [a for a in alerts if "leak" in a.message.lower()]
         assert len(leak_alerts) == 1
-

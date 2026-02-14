@@ -25,6 +25,9 @@ dev = [
   "ruff>=0.6.0",
   "mypy>=1.10.0",
   "types-psutil>=5.9.5.20240516",
+  "black>=24.0.0",
+  "isort>=5.13.0",
+  "pre-commit>=3.7.0",
 ]
 
 [tool.ruff]
@@ -63,3 +66,13 @@ pretty = true
 [[tool.mypy.overrides]]
 module = ["psutil.*"]
 ignore_missing_imports = true
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["thirtysecs"]
+skip_gitignore = true

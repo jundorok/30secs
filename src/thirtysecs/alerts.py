@@ -54,7 +54,9 @@ class MemoryLeakDetector:
 
         samples = list(self._history)
         first_half_avg = sum(samples[: self.window_size // 2]) / (self.window_size // 2)
-        second_half_avg = sum(samples[self.window_size // 2 :]) / (self.window_size - self.window_size // 2)
+        second_half_avg = sum(samples[self.window_size // 2 :]) / (
+            self.window_size - self.window_size // 2
+        )
 
         growth = second_half_avg - first_half_avg
 
@@ -161,7 +163,7 @@ class AlertChecker:
             else:
                 return None
 
-        if isinstance(current, (int, float)):
+        if isinstance(current, int | float):
             return float(current)
         return None
 
