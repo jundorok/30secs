@@ -46,6 +46,28 @@ curl -sL https://github.com/<your-repo>/30secs/releases/latest/download/30secs-l
   && /tmp/30secs watch -f table --alerts -i 10
 ```
 
+### pip (PyPI) - Recommended for environments without GitHub access
+
+```bash
+# Install from PyPI (Python 3.12+ required)
+pip install 30secs
+
+# Or use pipx for isolated install
+pipx install 30secs
+
+# Or use uv
+uv tool install 30secs
+
+# Then run
+30secs watch -f table --alerts -i 10
+```
+
+#### One-liner for K8s Node (pip)
+
+```bash
+pip install 30secs && 30secs watch -f table --alerts -i 10
+```
+
 ### From Source (uv)
 
 #### Install uv (official docs)
