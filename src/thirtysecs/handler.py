@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping, Tuple
+from collections.abc import Mapping
+from typing import Any
 
 from .errors import AppError
 from .http import ApiResponse, json_error, json_ok
 from .logging import configure_logging
 from .metrics import collect_snapshot
-
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def _extract_request_id(event: Mapping[str, Any], context: Any) -> str:
     return "unknown"
 
 
-def _extract_method_path(event: Mapping[str, Any]) -> Tuple[str, str]:
+def _extract_method_path(event: Mapping[str, Any]) -> tuple[str, str]:
     """Support API Gateway v2/v1 shapes (best-effort)."""
     rc = event.get("requestContext")
     if isinstance(rc, dict):
@@ -68,7 +68,11 @@ def _extract_method_path(event: Mapping[str, Any]) -> Tuple[str, str]:
     if isinstance(raw_path, str):
         return "GET", raw_path
 
-    raise AppError(status_code=400, code="bad_request", message="Could not determine HTTP method/path from event.")
+    raise AppError(
+        status_code=400,
+        code="bad_request",
+        message="Could not determine HTTP method/path from event.",
+    )
 
 
 def _route(method: str, path: str, *, request_id: str) -> ApiResponse:
@@ -101,6 +105,8 @@ def lambda_handler(event: Mapping[str, Any], context: Any) -> dict[str, Any]:
         log.warning("handled_error", extra={"request_id": request_id, "code": e.code})
         return json_error(e.status_code, e.code, e.message, request_id=request_id).to_lambda_proxy()
 
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("unhandled_error", extra={"request_id": request_id})
-        return json_error(500, "internal_error", "Unexpected server error.", request_id=request_id).to_lambda_proxy()
+        return json_error(
+            500, "internal_error", "Unexpected server error.", request_id=request_id
+        ).to_lambda_proxy()

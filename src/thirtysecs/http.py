@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
-
+from typing import Any
 
 JsonDict = dict[str, Any]
 
@@ -30,7 +30,9 @@ class ApiResponse:
         }
 
 
-def json_error(status_code: int, code: str, message: str, *, request_id: str | None = None) -> ApiResponse:
+def json_error(
+    status_code: int, code: str, message: str, *, request_id: str | None = None
+) -> ApiResponse:
     payload: JsonDict = {"error": {"code": code, "message": message}}
     headers: dict[str, str] = {}
     if request_id:

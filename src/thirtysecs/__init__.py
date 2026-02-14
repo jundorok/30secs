@@ -1,7 +1,7 @@
 """
 thirtysecs
 
-Internal import package for the `30secs` project.
+Ultra-lightweight system monitoring tool.
 
 Why `thirtysecs`?
   - Python identifiers can't start with a digit, but distribution names can.
@@ -10,6 +10,8 @@ Why `thirtysecs`?
 
 from __future__ import annotations
 
-__all__ = ["__version__"]
+from .core import collect_quick_snapshot, collect_snapshot
+
+__all__ = ["__version__", "collect_quick_snapshot", "collect_snapshot"]
 
 __version__ = "0.1.0"
