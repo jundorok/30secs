@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
-    {name = "GaussLabs"},
+    {name = "jundorok"},
 ]
 keywords = ["monitoring", "system", "metrics", "cli", "devops", "kubernetes", "debugging"]
 classifiers = [
@@ -27,9 +27,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/gausslabs/30secs"
-Repository = "https://github.com/gausslabs/30secs"
-Issues = "https://github.com/gausslabs/30secs/issues"
+Homepage = "https://github.com/jundorok/30secs"
+Repository = "https://github.com/jundorok/30secs"
+Issues = "https://github.com/jundorok/30secs/issues"
 
 [project.scripts]
 30secs = "thirtysecs.cli:main"
