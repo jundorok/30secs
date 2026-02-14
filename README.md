@@ -195,6 +195,30 @@ src/thirtysecs/
 | `DEFAULT_INTERVAL_SECONDS` | `30` | Default watch interval |
 | `INCLUDE_HOSTNAME` | `1` | Include hostname in output |
 | `LOG_LEVEL` | `INFO` | Logging level |
+| `ALERT_CPU_THRESHOLD` | `90.0` | CPU usage alert threshold (%) |
+| `ALERT_MEMORY_THRESHOLD` | `90.0` | Memory usage alert threshold (%) |
+| `ALERT_MEMORY_CRITICAL_THRESHOLD` | `95.0` | Critical memory alert threshold (%) |
+| `ALERT_SWAP_THRESHOLD` | `80.0` | Swap usage alert threshold (%) |
+| `MEMORY_LEAK_WINDOW_SIZE` | `10` | Number of samples for leak detection |
+| `MEMORY_LEAK_GROWTH_THRESHOLD` | `5.0` | Memory growth % to trigger leak alert |
+
+---
+
+## Memory Leak Detection
+
+30secs includes automatic memory leak detection when using `--alerts`:
+
+```bash
+# Monitor with leak detection (default: 10 samples, 5% growth threshold)
+30secs watch -f table --alerts -i 10
+
+# Custom thresholds via environment variables
+MEMORY_LEAK_WINDOW_SIZE=20 MEMORY_LEAK_GROWTH_THRESHOLD=3.0 30secs watch --alerts -i 5
+```
+
+The detector tracks memory usage over a sliding window and alerts when:
+- Memory growth exceeds the threshold (default: 5%)
+- At least 60% of samples show an increasing trend
 
 ---
 
