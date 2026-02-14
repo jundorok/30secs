@@ -8,7 +8,7 @@ import os
 import signal
 import sys
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from .alerts import get_default_alert_checker
@@ -118,11 +118,128 @@ def cmd_quick(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_inspect(args: argparse.Namespace) -> int:
+    """Inspect a specific process in detail."""
+    from .collectors.process import get_process_detail
+
+    pid = args.pid
+    detail = get_process_detail(pid)
+
+    if detail is None:
+        sys.stderr.write(f"Error: Process {pid} not found\n")
+        return 1
+
+    if "error" in detail and detail.get("error") == "Access denied":
+        sys.stderr.write(f"Error: Access denied for process {pid}\n")
+        return 1
+
+    if args.format == "json":
+        sys.stdout.write(json.dumps(detail, indent=2, default=str) + "\n")
+    else:
+        _print_process_detail(detail)
+
+    return 0
+
+
+def _print_process_detail(detail: dict[str, Any]) -> None:
+    """Print process detail in human-readable format."""
+    lines = [
+        "=" * 60,
+        f"  Process Detail - PID {detail['pid']}",
+        "=" * 60,
+        "",
+        "📌 BASIC INFO",
+        f"  Name:        {detail.get('name', 'N/A')}",
+        f"  Status:      {detail.get('status', 'N/A')}",
+        f"  User:        {detail.get('username', 'N/A')}",
+        f"  Created:     {detail.get('create_time', 'N/A')}",
+        f"  Command:     {detail.get('cmdline', 'N/A')[:80]}",
+    ]
+
+    if detail.get("cwd"):
+        lines.append(f"  Working Dir: {detail['cwd']}")
+
+    if detail.get("parent"):
+        lines.append(f"  Parent:      {detail['parent']['name']} (PID {detail['parent']['pid']})")
+
+    # Memory
+    mem = detail.get("memory", {})
+    if "error" not in mem:
+        lines.extend(
+            [
+                "",
+                "💾 MEMORY",
+                f"  RSS:         {mem.get('rss_human', 'N/A')} ({mem.get('percent', 0):.1f}%)",
+                f"  VMS:         {mem.get('vms_human', 'N/A')}",
+            ]
+        )
+        if mem.get("uss_human"):
+            lines.append(f"  USS:         {mem.get('uss_human', 'N/A')} (unique to this process)")
+        if mem.get("pss_human"):
+            lines.append(f"  PSS:         {mem.get('pss_human', 'N/A')} (proportional share)")
+
+    # CPU & Threads
+    cpu = detail.get("cpu", {})
+    threads = detail.get("threads", {})
+    lines.extend(
+        [
+            "",
+            "🖥  CPU & THREADS",
+            f"  CPU:         {cpu.get('percent', 0):.1f}%",
+            f"  Threads:     {threads.get('count', cpu.get('num_threads', 0))}",
+        ]
+    )
+
+    # Open files
+    open_files = detail.get("open_files", {})
+    if open_files.get("count", 0) > 0:
+        lines.extend(
+            [
+                "",
+                f"📂 OPEN FILES ({open_files['count']} total)",
+            ]
+        )
+        for f in open_files.get("files", [])[:10]:
+            lines.append(f"  • {f}")
+        if open_files["count"] > 10:
+            lines.append(f"  ... and {open_files['count'] - 10} more")
+
+    # Network connections
+    conns = detail.get("connections", {})
+    if conns.get("count", 0) > 0:
+        lines.extend(
+            [
+                "",
+                f"🌐 NETWORK CONNECTIONS ({conns['count']} total)",
+            ]
+        )
+        for c in conns.get("details", [])[:10]:
+            laddr = c.get("laddr", "N/A")
+            raddr = c.get("raddr", "N/A") or "*"
+            status = c.get("status", "")
+            lines.append(f"  • {laddr} → {raddr} ({status})")
+
+    # Children
+    children = detail.get("children", [])
+    if children:
+        lines.extend(
+            [
+                "",
+                f"👶 CHILD PROCESSES ({len(children)})",
+            ]
+        )
+        for c in children[:10]:
+            lines.append(f"  • PID {c['pid']}: {c['name']}")
+
+    lines.append("")
+    sys.stdout.write("\n".join(lines) + "\n")
+
+
 def cmd_health(args: argparse.Namespace) -> int:
     """Health check endpoint."""
     health = {
         "ok": True,
-        "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "service": settings.service_name,
     }
     sys.stdout.write(json.dumps(health) + "\n")
@@ -228,6 +345,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_common_args(p_quick)
     p_quick.set_defaults(func=cmd_quick)
+
+    # inspect command
+    p_inspect = subparsers.add_parser(
+        "inspect",
+        help="Inspect a specific process in detail",
+    )
+    p_inspect.add_argument(
+        "pid",
+        type=int,
+        help="Process ID to inspect",
+    )
+    p_inspect.add_argument(
+        "--format",
+        "-f",
+        choices=["json", "table"],
+        default="table",
+        help="Output format (default: table)",
+    )
+    p_inspect.set_defaults(func=cmd_inspect)
 
     # health command
     p_health = subparsers.add_parser(
