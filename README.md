@@ -27,12 +27,6 @@ curl -L https://github.com/<your-repo>/30secs/releases/latest/download/30secs-li
 # Linux ARM64 (Graviton, etc.)
 curl -L https://github.com/<your-repo>/30secs/releases/latest/download/30secs-linux-arm64 -o 30secs
 
-# macOS Apple Silicon
-curl -L https://github.com/<your-repo>/30secs/releases/latest/download/30secs-darwin-arm64 -o 30secs
-
-# macOS Intel
-curl -L https://github.com/<your-repo>/30secs/releases/latest/download/30secs-darwin-amd64 -o 30secs
-
 # Make executable and run
 chmod +x 30secs
 ./30secs watch -f table --alerts
@@ -49,7 +43,7 @@ curl -sL https://github.com/<your-repo>/30secs/releases/latest/download/30secs-l
 ### pip (PyPI) - Recommended for environments without GitHub access
 
 ```bash
-# Install from PyPI (Python 3.12+ required)
+# Install from PyPI (Python 3.11+ required)
 pip install 30secs
 
 # Or use pipx for isolated install
@@ -170,6 +164,22 @@ uv run 30secs leak <PID> --format json --interval 1 --count 60
 uv run 30secs leak top --interval 1 --count 20 --limit 5
 ```
 
+### Deep Python analysis with tracemalloc
+
+```bash
+# Run a script and report top growing file:line and object types
+uv run 30secs leak --deep-python --script app.py --script-args "--mode stress --iterations 2000"
+```
+
+```bash
+# Or run a module
+uv run 30secs leak --deep-python --module myservice.main --script-args "--port 8080"
+```
+
+Note:
+- `--deep-python` analyzes allocations after tracer start.
+- It runs the target in-process (not attach-to-existing-PID mode).
+
 ---
 
 ## Output Formats
@@ -236,12 +246,16 @@ uv run mypy src
 src/thirtysecs/
 ├── __init__.py          # Package init
 ├── __main__.py          # Entry point
-├── cli.py               # CLI interface
+├── cli.py               # CLI entrypoint and parser wiring
+├── leak_report.py       # Leak scoring/statistics
+├── deep_python.py       # Deep Python tracemalloc analysis
 ├── config.py            # Configuration
 ├── core.py              # Core snapshot logic
 ├── alerts.py            # Alert system
 ├── errors.py            # Error definitions
 ├── logging.py           # Structured logging
+├── commands/            # Command handlers
+│   └── leak.py          # `leak` and `leak top` handlers
 ├── collectors/          # Metric collectors
 │   ├── base.py          # Base collector interface
 │   ├── cpu.py           # CPU metrics

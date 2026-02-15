@@ -257,9 +257,20 @@ def cmd_version(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     """Build argument parser."""
+    examples = (
+        "Examples:\n"
+        "  30secs snapshot -f table\n"
+        "  30secs watch -f table -i 5 --alerts\n"
+        "  30secs inspect 12345 -f json\n"
+        "  30secs leak top -i 1 -n 20 -l 5\n"
+        "  30secs leak 12345 -i 2 -n 30\n"
+        '  30secs leak --deep-python --script app.py --script-args "--mode stress"\n'
+    )
     parser = argparse.ArgumentParser(
         prog="30secs",
         description="Ultra-lightweight system monitoring tool",
+        epilog=examples,
+        formatter_class=argparse.RawTextHelpFormatter,
     )
 
     # Global options
@@ -270,7 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show version and exit",
     )
 
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", title="Commands")
 
     # Common arguments for snapshot commands
     def add_common_args(p: argparse.ArgumentParser) -> None:

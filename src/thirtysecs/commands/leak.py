@@ -5,11 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 import time
+from dataclasses import asdict
 from typing import Any
 
 from ..core import collect_snapshot
+from ..deep_python import DeepPythonReport, run_deep_python_analysis
 from ..leak_report import LeakAnalysis, analyze_samples, sample_from_process_detail
 
 
@@ -175,6 +178,97 @@ def _format_leak_top_table(results: list[dict[str, Any]], interval: float, count
     return "\n".join(lines)
 
 
+def _format_deep_python_table(report: DeepPythonReport) -> str:
+    lines: list[str] = [
+        "=" * 112,
+        "  Python Deep Leak Report (tracemalloc)",
+        "=" * 112,
+        f"Target: {report.target}",
+        f"Args: {' '.join(report.args) if report.args else '(none)'}",
+        f"Duration: {report.duration_seconds:.2f}s | Traced current: {_bytes_to_human(report.traced_current_bytes)} | Traced peak: {_bytes_to_human(report.traced_peak_bytes)}",
+        "",
+        "Top Growing Lines:",
+        "+------+-----------------------------------------------+----------------+-----------+",
+        "| Rank | File:Line                                     | Size +         | Count +   |",
+        "+------+-----------------------------------------------+----------------+-----------+",
+    ]
+
+    if report.top_lines:
+        for idx, item in enumerate(report.top_lines, start=1):
+            file_line = f"{os.path.basename(item.filename)}:{item.lineno}"
+            lines.append(
+                f"| {idx:>4} | {file_line[:45]:<45} | {_bytes_to_human(item.size_diff):>14} | {item.count_diff:>9} |"
+            )
+    else:
+        lines.append(
+            "|    - | (no positive line-level growth captured)       |              - |         - |"
+        )
+    lines.extend(
+        [
+            "+------+-----------------------------------------------+----------------+-----------+",
+            "",
+            "Top Growing Object Types:",
+            "+------+-----------------------------------------------+----------------+-----------+",
+            "| Rank | Type                                          | Size +         | Count +   |",
+            "+------+-----------------------------------------------+----------------+-----------+",
+        ]
+    )
+
+    if report.top_types:
+        for idx, item in enumerate(report.top_types, start=1):
+            lines.append(
+                f"| {idx:>4} | {item.type_name[:45]:<45} | {_bytes_to_human(item.size_diff):>14} | {item.count_diff:>9} |"
+            )
+    else:
+        lines.append(
+            "|    - | (no positive type growth captured)             |              - |         - |"
+        )
+    lines.extend(
+        [
+            "+------+-----------------------------------------------+----------------+-----------+",
+            "",
+            "Note: tracemalloc tracks Python allocations after tracer start; native allocations may be underrepresented.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _cmd_leak_deep_python(args: argparse.Namespace) -> int:
+    """Run deep Python tracemalloc analysis for a script/module."""
+    if not args.script and not args.module:
+        sys.stderr.write("Error: --deep-python requires either --script or --module\n")
+        return 2
+    if args.script and args.module:
+        sys.stderr.write("Error: choose one target: --script or --module\n")
+        return 2
+
+    try:
+        script_args = shlex.split(args.script_args) if args.script_args else []
+    except ValueError as exc:
+        sys.stderr.write(f"Error: invalid --script-args: {exc}\n")
+        return 2
+
+    try:
+        report = run_deep_python_analysis(
+            script_path=args.script,
+            module_name=args.module,
+            script_args=script_args,
+            top_lines=args.top_lines,
+            top_types=args.top_types,
+            traceback_limit=args.traceback_limit,
+        )
+    except (ValueError, RuntimeError, FileNotFoundError, ImportError) as exc:
+        sys.stderr.write(f"Error: deep python analysis failed: {exc}\n")
+        return 1
+
+    if args.format == "json":
+        _output(json.dumps(asdict(report), indent=2), args.output)
+    else:
+        _output(_format_deep_python_table(report), args.output)
+    return 0
+
+
 def _cmd_leak_top(args: argparse.Namespace) -> int:
     """Rank top memory leak candidates from memory-heavy processes."""
     from ..collectors.process import get_process_detail
@@ -292,6 +386,9 @@ def cmd_leak(args: argparse.Namespace) -> int:
     """Capture process samples and print a leak analysis report."""
     from ..collectors.process import get_process_detail
 
+    if args.deep_python:
+        return _cmd_leak_deep_python(args)
+
     interval = float(args.interval)
     if interval <= 0:
         sys.stderr.write("Error: --interval must be > 0\n")
@@ -302,6 +399,10 @@ def cmd_leak(args: argparse.Namespace) -> int:
 
     if str(args.pid).lower() == "top":
         return _cmd_leak_top(args)
+
+    if args.pid is None:
+        sys.stderr.write("Error: pid is required, or enable --deep-python mode\n")
+        return 2
 
     try:
         pid = int(args.pid)
@@ -360,13 +461,31 @@ def cmd_leak(args: argparse.Namespace) -> int:
 
 def add_leak_parser(subparsers: Any) -> None:
     """Register `leak` subcommand parser."""
+    examples = (
+        "Examples:\n"
+        "  30secs leak 12345 -i 2 -n 30\n"
+        "  30secs leak 12345 -f json -o leak.json\n"
+        "  30secs leak top -i 1 -n 20 -l 5\n"
+        '  30secs leak --deep-python --script app.py --script-args "--mode stress"\n'
+        '  30secs leak --deep-python --module myservice.main --script-args "--port 8080"\n'
+    )
     p_leak = subparsers.add_parser(
         "leak",
         help="Analyze memory leak trend for a specific process, or rank top candidates",
+        description=(
+            "Memory leak analysis commands:\n"
+            "- PID mode: trend score for one process\n"
+            "- top mode: rank memory-heavy process candidates\n"
+            "- --deep-python: tracemalloc-based line/type growth report"
+        ),
+        epilog=examples,
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     p_leak.add_argument(
         "pid",
+        nargs="?",
         type=str,
+        default=None,
         help="Process ID to analyze, or `top` for ranked candidate scan",
     )
     p_leak.add_argument(
@@ -403,5 +522,46 @@ def add_leak_parser(subparsers: Any) -> None:
         type=str,
         default=None,
         help="Output file (default: stdout)",
+    )
+    p_leak.add_argument(
+        "--deep-python",
+        action="store_true",
+        help="Run Python deep analysis with tracemalloc (requires --script or --module)",
+    )
+    p_leak.add_argument(
+        "--script",
+        type=str,
+        default=None,
+        help="Python script path to run for deep analysis",
+    )
+    p_leak.add_argument(
+        "--module",
+        type=str,
+        default=None,
+        help="Python module name to run for deep analysis (e.g., mypkg.app)",
+    )
+    p_leak.add_argument(
+        "--script-args",
+        type=str,
+        default="",
+        help='Arguments for --script/--module as one quoted string, e.g. --script-args "--foo 1"',
+    )
+    p_leak.add_argument(
+        "--top-lines",
+        type=int,
+        default=15,
+        help="For --deep-python: number of top growing lines (default: 15)",
+    )
+    p_leak.add_argument(
+        "--top-types",
+        type=int,
+        default=15,
+        help="For --deep-python: number of top growing object types (default: 15)",
+    )
+    p_leak.add_argument(
+        "--traceback-limit",
+        type=int,
+        default=25,
+        help="For --deep-python: tracemalloc traceback depth (default: 25)",
     )
     p_leak.set_defaults(func=cmd_leak)
