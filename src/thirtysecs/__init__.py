@@ -14,4 +14,4 @@ from .core import collect_quick_snapshot, collect_snapshot
 
 __all__ = ["__version__", "collect_quick_snapshot", "collect_snapshot"]
 
-__version__ = "0.2.9"
+__version__ = "0.2.10"
