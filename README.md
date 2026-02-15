@@ -164,6 +164,12 @@ uv run 30secs leak <PID> --interval 2 --count 30
 uv run 30secs leak <PID> --format json --interval 1 --count 60
 ```
 
+### Rank top leak candidates
+
+```bash
+uv run 30secs leak top --interval 1 --count 20 --limit 5
+```
+
 ---
 
 ## Output Formats

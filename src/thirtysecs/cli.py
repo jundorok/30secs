@@ -12,10 +12,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .alerts import get_default_alert_checker
+from .commands.leak import add_leak_parser
 from .config import settings
 from .core import collect_quick_snapshot, collect_snapshot
 from .formatters import get_formatter
-from .leak_report import LeakAnalysis, analyze_samples, sample_from_process_detail
 from .logging import configure_logging
 
 # Graceful shutdown flag
@@ -138,186 +138,6 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         sys.stdout.write(json.dumps(detail, indent=2, default=str) + "\n")
     else:
         _print_process_detail(detail)
-
-    return 0
-
-
-def _bytes_to_human(n: float) -> str:
-    """Convert bytes to human-readable string."""
-    value = float(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(value) < 1024.0:
-            return f"{value:.2f} {unit}"
-        value /= 1024.0
-    return f"{value:.2f} PB"
-
-
-def _metric_row(label: str, start: str, end: str, growth: str, pct: str, trend: str) -> str:
-    return f"| {label:<11} | {start:>13} | {end:>13} | {growth:>13} | {pct:>9} | {trend:>8} |"
-
-
-def _format_leak_table(
-    detail: dict[str, Any],
-    analysis: LeakAnalysis,
-    interval: float,
-) -> str:
-    """Render leak report as table."""
-    lines: list[str] = [
-        "=" * 88,
-        f"  Memory Leak Report - PID {detail['pid']} ({detail.get('name', 'N/A')})",
-        "=" * 88,
-        f"Command: {detail.get('cmdline', 'N/A')[:120]}",
-        f"Samples: {analysis.sample_count} | Interval: {interval:.2f}s | Duration: {analysis.duration_seconds:.2f}s",
-        f"Leak Score: {analysis.score}/100 ({analysis.confidence.upper()})",
-        f"Diagnosis: {analysis.diagnosis}",
-        "",
-        "+-------------+---------------+---------------+---------------+-----------+----------+",
-        "| Metric      | Start         | End           | Growth        | Growth %  | Trend Up |",
-        "+-------------+---------------+---------------+---------------+-----------+----------+",
-    ]
-
-    rss = analysis.rss
-    rss_pct = f"{rss.growth_percent:.2f}%" if rss.growth_percent is not None else "N/A"
-    lines.append(
-        _metric_row(
-            "RSS",
-            _bytes_to_human(rss.start),
-            _bytes_to_human(rss.end),
-            _bytes_to_human(rss.growth),
-            rss_pct,
-            f"{rss.increasing_ratio:.0%}",
-        )
-    )
-
-    if analysis.uss:
-        uss = analysis.uss
-        uss_pct = f"{uss.growth_percent:.2f}%" if uss.growth_percent is not None else "N/A"
-        lines.append(
-            _metric_row(
-                "USS",
-                _bytes_to_human(uss.start),
-                _bytes_to_human(uss.end),
-                _bytes_to_human(uss.growth),
-                uss_pct,
-                f"{uss.increasing_ratio:.0%}",
-            )
-        )
-
-    if analysis.pss:
-        pss = analysis.pss
-        pss_pct = f"{pss.growth_percent:.2f}%" if pss.growth_percent is not None else "N/A"
-        lines.append(
-            _metric_row(
-                "PSS",
-                _bytes_to_human(pss.start),
-                _bytes_to_human(pss.end),
-                _bytes_to_human(pss.growth),
-                pss_pct,
-                f"{pss.increasing_ratio:.0%}",
-            )
-        )
-
-    threads = analysis.threads
-    open_files = analysis.open_files
-    connections = analysis.connections
-    lines.append(
-        _metric_row(
-            "Threads",
-            f"{int(threads.start)}",
-            f"{int(threads.end)}",
-            f"{int(threads.growth):+d}",
-            "N/A",
-            f"{threads.increasing_ratio:.0%}",
-        )
-    )
-    lines.append(
-        _metric_row(
-            "Open files",
-            f"{int(open_files.start)}",
-            f"{int(open_files.end)}",
-            f"{int(open_files.growth):+d}",
-            "N/A",
-            f"{open_files.increasing_ratio:.0%}",
-        )
-    )
-    lines.append(
-        _metric_row(
-            "Connections",
-            f"{int(connections.start)}",
-            f"{int(connections.end)}",
-            f"{int(connections.growth):+d}",
-            "N/A",
-            f"{connections.increasing_ratio:.0%}",
-        )
-    )
-    lines.extend(
-        [
-            "+-------------+---------------+---------------+---------------+-----------+----------+",
-            "",
-        ]
-    )
-
-    return "\n".join(lines)
-
-
-def cmd_leak(args: argparse.Namespace) -> int:
-    """Capture process samples and print a leak analysis report."""
-    from .collectors.process import get_process_detail
-
-    interval = float(args.interval)
-    if interval <= 0:
-        sys.stderr.write("Error: --interval must be > 0\n")
-        return 2
-    if args.count < 2:
-        sys.stderr.write("Error: --count must be >= 2\n")
-        return 2
-
-    pid = int(args.pid)
-    samples = []
-    last_detail: dict[str, Any] | None = None
-
-    for idx in range(args.count):
-        detail = get_process_detail(pid)
-        if detail is None:
-            sys.stderr.write(f"Error: Process {pid} not found during sampling (sample {idx + 1})\n")
-            return 1
-        if "error" in detail:
-            sys.stderr.write(f"Error: {detail['error']} for process {pid}\n")
-            return 1
-        samples.append(sample_from_process_detail(detail))
-        last_detail = detail
-
-        if idx < args.count - 1:
-            time.sleep(interval)
-
-    if last_detail is None:
-        sys.stderr.write("Error: Failed to collect process detail\n")
-        return 1
-
-    analysis = analyze_samples(samples, interval)
-    if args.format == "json":
-        payload = {
-            "pid": last_detail["pid"],
-            "name": last_detail.get("name"),
-            "cmdline": last_detail.get("cmdline"),
-            "analysis": {
-                "sample_count": analysis.sample_count,
-                "duration_seconds": analysis.duration_seconds,
-                "confidence": analysis.confidence,
-                "score": analysis.score,
-                "diagnosis": analysis.diagnosis,
-                "rss": analysis.rss.__dict__,
-                "uss": analysis.uss.__dict__ if analysis.uss else None,
-                "pss": analysis.pss.__dict__ if analysis.pss else None,
-                "threads": analysis.threads.__dict__,
-                "open_files": analysis.open_files.__dict__,
-                "connections": analysis.connections.__dict__,
-            },
-            "samples": [s.__dict__ for s in samples],
-        }
-        _output(json.dumps(payload, indent=2), args.output)
-    else:
-        _output(_format_leak_table(last_detail, analysis, interval), args.output)
 
     return 0
 
@@ -547,44 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_inspect.set_defaults(func=cmd_inspect)
 
     # leak command
-    p_leak = subparsers.add_parser(
-        "leak",
-        help="Analyze memory leak trend for a specific process",
-    )
-    p_leak.add_argument(
-        "pid",
-        type=int,
-        help="Process ID to analyze",
-    )
-    p_leak.add_argument(
-        "--interval",
-        "-i",
-        type=float,
-        default=2.0,
-        help="Sampling interval in seconds (default: 2.0)",
-    )
-    p_leak.add_argument(
-        "--count",
-        "-n",
-        type=int,
-        default=30,
-        help="Number of samples (default: 30)",
-    )
-    p_leak.add_argument(
-        "--format",
-        "-f",
-        choices=["table", "json"],
-        default="table",
-        help="Report format (default: table)",
-    )
-    p_leak.add_argument(
-        "--output",
-        "-o",
-        type=str,
-        default=None,
-        help="Output file (default: stdout)",
-    )
-    p_leak.set_defaults(func=cmd_leak)
+    add_leak_parser(subparsers)
 
     # health command
     p_health = subparsers.add_parser(
