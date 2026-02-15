@@ -152,6 +152,18 @@ uv run 30secs watch --count 10 --interval 5
 uv run 30secs snapshot --no-processes --no-network
 ```
 
+### Memory leak report for a process (table)
+
+```bash
+uv run 30secs leak <PID> --interval 2 --count 30
+```
+
+### Memory leak report as JSON
+
+```bash
+uv run 30secs leak <PID> --format json --interval 1 --count 60
+```
+
 ---
 
 ## Output Formats
