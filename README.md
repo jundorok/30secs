@@ -5,8 +5,14 @@
 ## Features
 
 - **Real-time monitoring**: CPU, memory, disk, network, and process metrics
+- **Memory leak analysis**: Per-process leak scoring with linear regression, R² confidence, and resource correlation (threads, FDs, connections)
+- **OOM killer detection**: Parse kernel OOM kill events from dmesg/journal with process and cgroup details
+- **Container-aware**: cgroup v1/v2 memory limits, usage, and pressure (PSI) for Kubernetes environments
+- **Deep Python analysis**: tracemalloc-based line-level and type-level memory growth detection
+- **Kernel memory details**: Buffers, Cached, Slab, PageTables, HugePages from /proc/meminfo
+- **Process deep-dive**: smaps_rollup mapping breakdown, page fault counters, USS/PSS metrics
 - **Multiple output formats**: JSON, human-readable table, Prometheus metrics
-- **Alert system**: Configurable threshold-based alerts
+- **Alert system**: Configurable threshold-based alerts with leak detection cooldown
 - **Graceful shutdown**: Handles SIGINT/SIGTERM signals
 - **Production-ready**: Structured logging, error handling, modular architecture
 
@@ -146,10 +152,17 @@ uv run 30secs watch --count 10 --interval 5
 uv run 30secs snapshot --no-processes --no-network
 ```
 
-### Memory leak report for a process (table)
+### Memory leak report for a process
 
 ```bash
+# Sample a process 30 times at 2s intervals and display a leak score
 uv run 30secs leak <PID> --interval 2 --count 30
+
+# The report includes:
+#   - Leak score (0-100) with confidence level
+#   - RSS/USS/PSS growth and linear regression (slope, R²)
+#   - Resource correlation warnings (threads, FDs, connections)
+#   - smaps_rollup data and page fault counters (Linux)
 ```
 
 ### Memory leak report as JSON
@@ -161,6 +174,7 @@ uv run 30secs leak <PID> --format json --interval 1 --count 60
 ### Rank top leak candidates
 
 ```bash
+# Find the 5 most memory-heavy processes and rank them by leak likelihood
 uv run 30secs leak top --interval 1 --count 20 --limit 5
 ```
 
@@ -169,9 +183,7 @@ uv run 30secs leak top --interval 1 --count 20 --limit 5
 ```bash
 # Run a script and report top growing file:line and object types
 uv run 30secs leak --deep-python --script app.py --script-args "--mode stress --iterations 2000"
-```
 
-```bash
 # Or run a module
 uv run 30secs leak --deep-python --module myservice.main --script-args "--port 8080"
 ```
@@ -179,6 +191,16 @@ uv run 30secs leak --deep-python --module myservice.main --script-args "--port 8
 Note:
 - `--deep-python` analyzes allocations after tracer start.
 - It runs the target in-process (not attach-to-existing-PID mode).
+
+### Check for OOM killer events
+
+```bash
+# Show recent OOM kills from dmesg and systemd journal
+uv run 30secs oom
+
+# Save as JSON (includes cgroup/memcg info for K8s debugging)
+uv run 30secs oom -f json -o oom-events.json
+```
 
 ---
 
@@ -246,23 +268,31 @@ uv run mypy src
 src/thirtysecs/
 ├── __init__.py          # Package init
 ├── __main__.py          # Entry point
-├── cli.py               # CLI entrypoint and parser wiring
-├── leak_report.py       # Leak scoring/statistics
-├── deep_python.py       # Deep Python tracemalloc analysis
-├── config.py            # Configuration
+├── cli.py               # CLI argument parser wiring
 ├── core.py              # Core snapshot logic
-├── alerts.py            # Alert system
+├── config.py            # Configuration (env vars)
+├── utils.py             # Shared utilities (bytes_to_human, output_text)
+├── alerts.py            # Alert system with leak detection cooldown
+├── leak_report.py       # Leak scoring with linear regression
+├── deep_python.py       # Deep Python tracemalloc analysis
+├── oom.py               # OOM killer event detection
 ├── errors.py            # Error definitions
-├── logging.py           # Structured logging
+├── logging.py           # Structured JSON logging
+├── handler.py           # AWS Lambda handler
+├── http.py              # HTTP response helpers
 ├── commands/            # Command handlers
-│   └── leak.py          # `leak` and `leak top` handlers
+│   ├── snapshot.py      # snapshot / watch / quick handlers
+│   ├── inspect.py       # process inspect handler
+│   ├── leak.py          # leak / leak top handlers
+│   ├── oom.py           # oom command handler
+│   └── health.py        # health / version handlers
 ├── collectors/          # Metric collectors
 │   ├── base.py          # Base collector interface
 │   ├── cpu.py           # CPU metrics
-│   ├── memory.py        # Memory metrics
+│   ├── memory.py        # Memory metrics (+ cgroup, PSI, /proc/meminfo)
 │   ├── disk.py          # Disk metrics
 │   ├── network.py       # Network metrics
-│   ├── process.py       # Process metrics
+│   ├── process.py       # Process metrics (+ smaps_rollup, page faults)
 │   └── system.py        # System info
 └── formatters/          # Output formatters
     ├── base.py          # Base formatter interface
@@ -292,6 +322,8 @@ src/thirtysecs/
 
 ## Memory Leak Detection
 
+### Continuous monitoring (--alerts)
+
 30secs includes automatic memory leak detection when using `--alerts`:
 
 ```bash
@@ -305,6 +337,54 @@ MEMORY_LEAK_WINDOW_SIZE=20 MEMORY_LEAK_GROWTH_THRESHOLD=3.0 30secs watch --alert
 The detector tracks memory usage over a sliding window and alerts when:
 - Memory growth exceeds the threshold (default: 5%)
 - At least 60% of samples show an increasing trend
+- Alerts include the linear regression slope (%/sample) for rate estimation
+- A cooldown period suppresses repeat alerts to avoid alert storms
+
+### On-demand leak analysis (leak command)
+
+The `leak` command provides deeper per-process analysis:
+
+```bash
+# Analyze a single process (more samples = more accurate)
+30secs leak <PID> -i 2 -n 30
+
+# Rank the top 5 memory-heavy processes by leak score
+30secs leak top -i 1 -n 20 -l 5
+```
+
+**How scoring works:**
+
+| Confidence | Score | Criteria |
+|------------|-------|----------|
+| **High** | 85-95 | RSS growth >= 15%, trend >= 70%, high R² linear fit |
+| **Medium** | 60-70 | RSS growth >= 7%, trend >= 60% |
+| **Low** | 35-40 | RSS growth >= 3%, trend >= 55%, or slow-but-linear growth (R² >= 0.8) |
+| **None** | 10 | No leak pattern detected |
+
+The analysis also checks for correlated resource leaks — growing thread counts, open file descriptors, or network connections are flagged as resource warnings.
+
+### OOM killer events (oom command)
+
+```bash
+# Check if the OOM killer has been active
+30secs oom
+
+# JSON output with cgroup details (useful for K8s pod eviction debugging)
+30secs oom -f json
+```
+
+Parses kernel OOM kill events from both `dmesg` and `journalctl`, showing:
+- Which processes were killed and their memory usage at kill time
+- cgroup membership (identifies which Kubernetes pod/container was affected)
+- The most frequently killed process name
+
+### Container / Kubernetes memory
+
+When running inside a container, `30secs snapshot` now automatically includes:
+- **cgroup memory limits** (v1 and v2): the actual memory limit enforced by Kubernetes, not just the node's total RAM
+- **cgroup usage as percent of limit**: so you can see how close you are to OOM
+- **Memory pressure (PSI)**: `avg10`, `avg60`, `avg300` pressure stall metrics — if pressure is high, the system is thrashing even before the OOM killer fires
+- **Kernel memory details**: Slab, PageTables, KernelStack, Buffers, Cached — helps distinguish userspace leaks from kernel memory growth
 
 ---
 

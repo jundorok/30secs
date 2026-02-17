@@ -6,16 +6,8 @@ from typing import Any
 
 import psutil
 
+from ..utils import bytes_to_human
 from .base import BaseCollector
-
-
-def _bytes_to_human(n: int) -> str:
-    """Convert bytes to human-readable string."""
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(n) < 1024.0:
-            return f"{n:.2f} {unit}"
-        n = int(n / 1024)
-    return f"{n:.2f} PB"
 
 
 class DiskCollector(BaseCollector):
@@ -37,11 +29,11 @@ class DiskCollector(BaseCollector):
                         "mountpoint": part.mountpoint,
                         "fstype": part.fstype,
                         "total": usage.total,
-                        "total_human": _bytes_to_human(usage.total),
+                        "total_human": bytes_to_human(usage.total),
                         "used": usage.used,
-                        "used_human": _bytes_to_human(usage.used),
+                        "used_human": bytes_to_human(usage.used),
                         "free": usage.free,
-                        "free_human": _bytes_to_human(usage.free),
+                        "free_human": bytes_to_human(usage.free),
                         "percent": round(usage.percent, 2),
                     }
                 )
@@ -57,9 +49,9 @@ class DiskCollector(BaseCollector):
                     "read_count": io.read_count,
                     "write_count": io.write_count,
                     "read_bytes": io.read_bytes,
-                    "read_bytes_human": _bytes_to_human(io.read_bytes),
+                    "read_bytes_human": bytes_to_human(io.read_bytes),
                     "write_bytes": io.write_bytes,
-                    "write_bytes_human": _bytes_to_human(io.write_bytes),
+                    "write_bytes_human": bytes_to_human(io.write_bytes),
                 }
         except Exception:
             pass
