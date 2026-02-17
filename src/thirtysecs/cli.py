@@ -13,6 +13,7 @@ from typing import Any
 
 from .alerts import get_default_alert_checker
 from .commands.leak import add_leak_parser
+from .commands.oom import add_oom_parser
 from .config import settings
 from .core import collect_quick_snapshot, collect_snapshot
 from .formatters import get_formatter
@@ -265,6 +266,8 @@ def build_parser() -> argparse.ArgumentParser:
         "  30secs leak top -i 1 -n 20 -l 5\n"
         "  30secs leak 12345 -i 2 -n 30\n"
         '  30secs leak --deep-python --script app.py --script-args "--mode stress"\n'
+        "  30secs oom                                  # show OOM killer events\n"
+        "  30secs oom -f json -o oom.json              # save OOM report as JSON\n"
     )
     parser = argparse.ArgumentParser(
         prog="30secs",
@@ -379,6 +382,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # leak command
     add_leak_parser(subparsers)
+
+    # oom command
+    add_oom_parser(subparsers)
 
     # health command
     p_health = subparsers.add_parser(

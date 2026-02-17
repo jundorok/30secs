@@ -482,20 +482,31 @@ def add_leak_parser(subparsers: Any) -> None:
     """Register `leak` subcommand parser."""
     examples = (
         "Examples:\n"
-        "  30secs leak 12345 -i 2 -n 30\n"
-        "  30secs leak 12345 -f json -o leak.json\n"
-        "  30secs leak top -i 1 -n 20 -l 5\n"
+        "  30secs leak 12345 -i 2 -n 30           # analyze PID 12345 (30 samples, 2s apart)\n"
+        "  30secs leak 12345 -f json -o leak.json  # save leak report as JSON\n"
+        "  30secs leak top -i 1 -n 20 -l 5         # rank top 5 leakiest processes\n"
         '  30secs leak --deep-python --script app.py --script-args "--mode stress"\n'
         '  30secs leak --deep-python --module myservice.main --script-args "--port 8080"\n'
+        "\n"
+        "Understanding the output:\n"
+        "  Score    0-100 leak likelihood (higher = more likely leaking)\n"
+        "  R²       Linear fit quality (1.0 = perfectly linear growth)\n"
+        "  Slope    Memory growth rate per sample\n"
+        "  Trend Up Fraction of consecutive samples that increased\n"
     )
     p_leak = subparsers.add_parser(
         "leak",
         help="Analyze memory leak trend for a specific process, or rank top candidates",
         description=(
             "Memory leak analysis commands:\n"
-            "- PID mode: trend score for one process\n"
-            "- top mode: rank memory-heavy process candidates\n"
-            "- --deep-python: tracemalloc-based line/type growth report"
+            "- PID mode:      sample one process and compute a leak score with\n"
+            "                  linear regression (slope, R²), trend ratio, and\n"
+            "                  resource correlation (threads, FDs, connections)\n"
+            "- top mode:      rank the N heaviest processes by leak score\n"
+            "- --deep-python: tracemalloc-based line/type growth report\n"
+            "\n"
+            "The report also includes smaps_rollup data and page fault\n"
+            "counters when available (Linux)."
         ),
         epilog=examples,
         formatter_class=argparse.RawTextHelpFormatter,
