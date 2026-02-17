@@ -123,6 +123,36 @@ class TestMemoryLeakDetector:
         leak = detector.check_leak()
         assert leak is None
 
+    def test_cooldown_suppresses_repeat_alerts(self):
+        detector = MemoryLeakDetector(
+            window_size=5, growth_threshold=3.0, cooldown_samples=3,
+        )
+        # Trigger initial leak detection
+        for s in [50.0, 52.0, 54.0, 56.0, 58.0]:
+            detector.add_sample(s)
+        first = detector.check_leak()
+        assert first is not None
+
+        # Cooldown=3: next 3 add_sample calls decrement the counter.
+        # During cooldown, check_leak should return None.
+        detector.add_sample(60.0)  # cooldown: 3 -> 2
+        assert detector.check_leak() is None
+        detector.add_sample(62.0)  # cooldown: 2 -> 1
+        assert detector.check_leak() is None
+        detector.add_sample(64.0)  # cooldown: 1 -> 0
+        # Cooldown just expired, but check_leak should now proceed
+        result = detector.check_leak()
+        # The leak conditions are still met, so it should fire again
+        assert result is not None
+
+    def test_stats_include_slope(self):
+        detector = MemoryLeakDetector(window_size=5, growth_threshold=5.0)
+        for s in [50.0, 52.0, 54.0]:
+            detector.add_sample(s)
+        stats = detector.get_stats()
+        assert "slope" in stats
+        assert stats["slope"] > 0
+
     def test_stats(self):
         detector = MemoryLeakDetector(window_size=5, growth_threshold=5.0)
 

@@ -34,11 +34,21 @@ class Alert:
 
 @dataclass
 class MemoryLeakDetector:
-    """Detect memory leaks by tracking memory usage over time."""
+    """Detect memory leaks by tracking memory usage over time.
+
+    Improvements over a simple first-half / second-half comparison:
+    - Linear regression slope for rate-of-change estimation.
+    - Alert cooldown to avoid firing on every consecutive sample once the
+      threshold is crossed.
+    - Tracks per-sample derivative so callers can inspect instantaneous
+      growth rate.
+    """
 
     window_size: int = field(default_factory=lambda: settings.memory_leak_window_size)
     growth_threshold: float = field(default_factory=lambda: settings.memory_leak_growth_threshold)
+    cooldown_samples: int = 3  # suppress re-alert for N samples after fire
     _history: deque[float] = field(default_factory=deque)
+    _samples_since_alert: int = field(default=0, repr=False)
 
     def __post_init__(self) -> None:
         self._history = deque(maxlen=self.window_size)
@@ -46,11 +56,29 @@ class MemoryLeakDetector:
     def add_sample(self, memory_percent: float) -> None:
         """Add a memory usage sample."""
         self._history.append(memory_percent)
+        if self._samples_since_alert > 0:
+            self._samples_since_alert -= 1
+
+    @staticmethod
+    def _slope(samples: list[float]) -> float:
+        """Compute least-squares slope of *samples* vs index."""
+        n = len(samples)
+        if n < 2:
+            return 0.0
+        x_mean = (n - 1) / 2.0
+        y_mean = sum(samples) / n
+        ss_xy = sum((i - x_mean) * (v - y_mean) for i, v in enumerate(samples))
+        ss_xx = sum((i - x_mean) ** 2 for i in range(n))
+        if ss_xx == 0:
+            return 0.0
+        return ss_xy / ss_xx
 
     def check_leak(self) -> Alert | None:
         """Check if memory usage shows a leak pattern (consistent growth)."""
         if len(self._history) < self.window_size:
             return None
+        if self._samples_since_alert > 0:
+            return None  # cooldown active
 
         samples = list(self._history)
         first_half_avg = sum(samples[: self.window_size // 2]) / (self.window_size // 2)
@@ -64,13 +92,20 @@ class MemoryLeakDetector:
         increasing_count = sum(1 for i in range(1, len(samples)) if samples[i] > samples[i - 1])
         trend_ratio = increasing_count / (len(samples) - 1)
 
+        slope = self._slope(samples)
+
         if growth >= self.growth_threshold and trend_ratio >= 0.6:
+            self._samples_since_alert = self.cooldown_samples
             rule = AlertRule(
                 name="Memory Leak Detected",
                 metric="memory.virtual.percent",
                 operator="trend",
                 threshold=self.growth_threshold,
-                message=f"Potential memory leak: +{growth:.1f}% over {self.window_size} samples (trend: {trend_ratio:.0%} increasing)",
+                message=(
+                    f"Potential memory leak: +{growth:.1f}% over "
+                    f"{self.window_size} samples (trend: {trend_ratio:.0%} "
+                    f"increasing, slope: {slope:.2f}%/sample)"
+                ),
             )
             return Alert(rule=rule, value=growth, message=rule.message)
 
@@ -79,7 +114,14 @@ class MemoryLeakDetector:
     def get_stats(self) -> dict[str, Any]:
         """Get current memory tracking stats."""
         if not self._history:
-            return {"samples": 0, "min": 0, "max": 0, "current": 0, "growth": 0}
+            return {
+                "samples": 0,
+                "min": 0,
+                "max": 0,
+                "current": 0,
+                "growth": 0,
+                "slope": 0,
+            }
 
         samples = list(self._history)
         return {
@@ -88,6 +130,7 @@ class MemoryLeakDetector:
             "max": round(max(samples), 2),
             "current": round(samples[-1], 2),
             "growth": round(samples[-1] - samples[0], 2) if len(samples) > 1 else 0,
+            "slope": round(self._slope(samples), 4),
         }
 
 

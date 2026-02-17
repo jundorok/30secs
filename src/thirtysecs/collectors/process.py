@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import psutil
@@ -18,6 +19,69 @@ def _bytes_to_human(n: int) -> str:
             return f"{n:.2f} {unit}"
         n = int(n / 1024)
     return f"{n:.2f} PB"
+
+
+def collect_smaps_rollup(pid: int) -> dict[str, Any] | None:
+    """Read /proc/<pid>/smaps_rollup for aggregated mapping stats.
+
+    smaps_rollup provides a single-line summary of all memory mappings
+    and is much cheaper than parsing the full smaps file.  Returns
+    selected fields in bytes, or *None* if the file is not accessible.
+    """
+    path = Path(f"/proc/{pid}/smaps_rollup")
+    if not path.exists():
+        return None
+
+    fields_of_interest = {
+        "Rss", "Pss", "Shared_Clean", "Shared_Dirty",
+        "Private_Clean", "Private_Dirty", "Referenced",
+        "Anonymous", "Swap", "SwapPss", "Locked",
+    }
+    result: dict[str, Any] = {}
+    try:
+        with open(path) as fh:
+            for line in fh:
+                parts = line.split(":")
+                if len(parts) != 2:
+                    continue
+                key = parts[0].strip()
+                if key not in fields_of_interest:
+                    continue
+                val_parts = parts[1].strip().split()
+                try:
+                    value_kb = int(val_parts[0])
+                except (ValueError, IndexError):
+                    continue
+                value_bytes = value_kb * 1024
+                result[key] = value_bytes
+                result[f"{key}_human"] = _bytes_to_human(value_bytes)
+    except (OSError, PermissionError):
+        return None
+
+    return result or None
+
+
+def collect_page_faults(pid: int) -> dict[str, int] | None:
+    """Read major/minor page fault counters from /proc/<pid>/stat."""
+    path = Path(f"/proc/{pid}/stat")
+    try:
+        data = path.read_text()
+        # Fields after the comm (name in parens): fields are 1-indexed.
+        # minflt=10, majflt=12 (0-indexed after splitting on ")")
+        close_paren = data.rfind(")")
+        if close_paren < 0:
+            return None
+        fields = data[close_paren + 2 :].split()
+        # After the closing paren and space, field indices:
+        # 0=state, 1=ppid, ..., 7=minflt, 8=cminflt, 9=majflt, 10=cmajflt
+        if len(fields) < 11:
+            return None
+        return {
+            "minor_faults": int(fields[7]),
+            "major_faults": int(fields[9]),
+        }
+    except (OSError, ValueError, IndexError):
+        return None
 
 
 def get_process_detail(pid: int) -> dict[str, Any] | None:
@@ -145,6 +209,16 @@ def get_process_detail(pid: int) -> dict[str, Any] | None:
                 info["children"] = [{"pid": c.pid, "name": c.name()} for c in children[:10]]
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 info["children"] = []
+
+            # smaps rollup — detailed memory mapping summary
+            smaps = collect_smaps_rollup(pid)
+            if smaps is not None:
+                info["smaps"] = smaps
+
+            # Page faults
+            faults = collect_page_faults(pid)
+            if faults is not None:
+                info["page_faults"] = faults
 
         return info
 

@@ -140,6 +140,25 @@ def _format_leak_table(
         ]
     )
 
+    # R² and slope summary
+    lines.append(
+        f"Linear fit: RSS slope={_bytes_to_human(analysis.rss.slope)}/sample, "
+        f"R²={analysis.rss.r_squared:.2f}"
+    )
+    if analysis.uss:
+        lines.append(
+            f"            USS slope={_bytes_to_human(analysis.uss.slope)}/sample, "
+            f"R²={analysis.uss.r_squared:.2f}"
+        )
+    lines.append("")
+
+    # Resource correlation warnings
+    if analysis.resource_warnings:
+        lines.append("Resource warnings:")
+        for warning in analysis.resource_warnings:
+            lines.append(f"  - {warning}")
+        lines.append("")
+
     return "\n".join(lines)
 
 
