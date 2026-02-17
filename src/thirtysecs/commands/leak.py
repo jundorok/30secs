@@ -14,26 +14,7 @@ from typing import Any
 from ..core import collect_snapshot
 from ..deep_python import DeepPythonReport, run_deep_python_analysis
 from ..leak_report import LeakAnalysis, analyze_samples, sample_from_process_detail
-
-
-def _output(data: str, output_file: str | None = None) -> None:
-    """Write output to stdout or file."""
-    if output_file:
-        mode = "a" if os.path.exists(output_file) else "w"
-        with open(output_file, mode) as f:
-            f.write(data + "\n")
-    else:
-        sys.stdout.write(data + "\n")
-        sys.stdout.flush()
-
-
-def _bytes_to_human(n: float) -> str:
-    value = float(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(value) < 1024.0:
-            return f"{value:.2f} {unit}"
-        value /= 1024.0
-    return f"{value:.2f} PB"
+from ..utils import bytes_to_human, output_text
 
 
 def _metric_row(label: str, start: str, end: str, growth: str, pct: str, trend: str) -> str:
@@ -64,9 +45,9 @@ def _format_leak_table(
     lines.append(
         _metric_row(
             "RSS",
-            _bytes_to_human(rss.start),
-            _bytes_to_human(rss.end),
-            _bytes_to_human(rss.growth),
+            bytes_to_human(rss.start),
+            bytes_to_human(rss.end),
+            bytes_to_human(rss.growth),
             rss_pct,
             f"{rss.increasing_ratio:.0%}",
         )
@@ -78,9 +59,9 @@ def _format_leak_table(
         lines.append(
             _metric_row(
                 "USS",
-                _bytes_to_human(uss.start),
-                _bytes_to_human(uss.end),
-                _bytes_to_human(uss.growth),
+                bytes_to_human(uss.start),
+                bytes_to_human(uss.end),
+                bytes_to_human(uss.growth),
                 uss_pct,
                 f"{uss.increasing_ratio:.0%}",
             )
@@ -92,9 +73,9 @@ def _format_leak_table(
         lines.append(
             _metric_row(
                 "PSS",
-                _bytes_to_human(pss.start),
-                _bytes_to_human(pss.end),
-                _bytes_to_human(pss.growth),
+                bytes_to_human(pss.start),
+                bytes_to_human(pss.end),
+                bytes_to_human(pss.growth),
                 pss_pct,
                 f"{pss.increasing_ratio:.0%}",
             )
@@ -142,12 +123,12 @@ def _format_leak_table(
 
     # R² and slope summary
     lines.append(
-        f"Linear fit: RSS slope={_bytes_to_human(analysis.rss.slope)}/sample, "
+        f"Linear fit: RSS slope={bytes_to_human(analysis.rss.slope)}/sample, "
         f"R²={analysis.rss.r_squared:.2f}"
     )
     if analysis.uss:
         lines.append(
-            f"            USS slope={_bytes_to_human(analysis.uss.slope)}/sample, "
+            f"            USS slope={bytes_to_human(analysis.uss.slope)}/sample, "
             f"R²={analysis.uss.r_squared:.2f}"
         )
     lines.append("")
@@ -204,7 +185,7 @@ def _format_deep_python_table(report: DeepPythonReport) -> str:
         "=" * 112,
         f"Target: {report.target}",
         f"Args: {' '.join(report.args) if report.args else '(none)'}",
-        f"Duration: {report.duration_seconds:.2f}s | Traced current: {_bytes_to_human(report.traced_current_bytes)} | Traced peak: {_bytes_to_human(report.traced_peak_bytes)}",
+        f"Duration: {report.duration_seconds:.2f}s | Traced current: {bytes_to_human(report.traced_current_bytes)} | Traced peak: {bytes_to_human(report.traced_peak_bytes)}",
         "",
         "Top Growing Lines:",
         "+------+-----------------------------------------------+----------------+-----------+",
@@ -216,7 +197,7 @@ def _format_deep_python_table(report: DeepPythonReport) -> str:
         for idx, item in enumerate(report.top_lines, start=1):
             file_line = f"{os.path.basename(item.filename)}:{item.lineno}"
             lines.append(
-                f"| {idx:>4} | {file_line[:45]:<45} | {_bytes_to_human(item.size_diff):>14} | {item.count_diff:>9} |"
+                f"| {idx:>4} | {file_line[:45]:<45} | {bytes_to_human(item.size_diff):>14} | {item.count_diff:>9} |"
             )
     else:
         lines.append(
@@ -236,7 +217,7 @@ def _format_deep_python_table(report: DeepPythonReport) -> str:
     if report.top_types:
         for idx, item in enumerate(report.top_types, start=1):
             lines.append(
-                f"| {idx:>4} | {item.type_name[:45]:<45} | {_bytes_to_human(item.size_diff):>14} | {item.count_diff:>9} |"
+                f"| {idx:>4} | {item.type_name[:45]:<45} | {bytes_to_human(item.size_diff):>14} | {item.count_diff:>9} |"
             )
     else:
         lines.append(
@@ -282,9 +263,9 @@ def _cmd_leak_deep_python(args: argparse.Namespace) -> int:
         return 1
 
     if args.format == "json":
-        _output(json.dumps(asdict(report), indent=2), args.output)
+        output_text(json.dumps(asdict(report), indent=2), args.output)
     else:
-        _output(_format_deep_python_table(report), args.output)
+        output_text(_format_deep_python_table(report), args.output)
     return 0
 
 
@@ -394,9 +375,9 @@ def _cmd_leak_top(args: argparse.Namespace) -> int:
                 for idx, result in enumerate(results)
             ],
         }
-        _output(json.dumps(payload, indent=2), args.output)
+        output_text(json.dumps(payload, indent=2), args.output)
     else:
-        _output(_format_leak_top_table(results, interval, count), args.output)
+        output_text(_format_leak_top_table(results, interval, count), args.output)
 
     return 0
 
@@ -471,9 +452,9 @@ def cmd_leak(args: argparse.Namespace) -> int:
             },
             "samples": [s.__dict__ for s in samples],
         }
-        _output(json.dumps(payload, indent=2), args.output)
+        output_text(json.dumps(payload, indent=2), args.output)
     else:
-        _output(_format_leak_table(last_detail, analysis, interval), args.output)
+        output_text(_format_leak_table(last_detail, analysis, interval), args.output)
 
     return 0
 

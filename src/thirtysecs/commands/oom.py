@@ -4,32 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import asdict
 from typing import Any
 
 from ..oom import collect_oom_events
-
-
-def _output(data: str, output_file: str | None = None) -> None:
-    """Write output to stdout or file."""
-    if output_file:
-        mode = "a" if os.path.exists(output_file) else "w"
-        with open(output_file, mode) as f:
-            f.write(data + "\n")
-    else:
-        sys.stdout.write(data + "\n")
-        sys.stdout.flush()
-
-
-def _bytes_to_human(n: int) -> str:
-    value = float(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(value) < 1024.0:
-            return f"{value:.2f} {unit}"
-        value /= 1024.0
-    return f"{value:.2f} PB"
+from ..utils import bytes_to_human, output_text
 
 
 def _format_oom_table(report: Any) -> str:
@@ -61,9 +41,9 @@ def _format_oom_table(report: Any) -> str:
     ])
 
     for idx, ev in enumerate(report.events, start=1):
-        total_vm = _bytes_to_human(ev.total_vm_kb * 1024) if ev.total_vm_kb else "N/A"
-        anon_rss = _bytes_to_human(ev.anon_rss_kb * 1024) if ev.anon_rss_kb else "N/A"
-        file_rss = _bytes_to_human(ev.file_rss_kb * 1024) if ev.file_rss_kb else "N/A"
+        total_vm = bytes_to_human(ev.total_vm_kb * 1024) if ev.total_vm_kb else "N/A"
+        anon_rss = bytes_to_human(ev.anon_rss_kb * 1024) if ev.anon_rss_kb else "N/A"
+        file_rss = bytes_to_human(ev.file_rss_kb * 1024) if ev.file_rss_kb else "N/A"
         lines.append(
             f"| {idx:>4} | {ev.pid:>6} | {ev.name[:20]:<20} |"
             f" {total_vm:>12} | {anon_rss:>12} | {file_rss:>12} |"
@@ -97,9 +77,9 @@ def cmd_oom(args: argparse.Namespace) -> int:
             "source_errors": report.source_errors,
             "events": [asdict(ev) for ev in report.events],
         }
-        _output(json.dumps(payload, indent=2), args.output)
+        output_text(json.dumps(payload, indent=2), args.output)
     else:
-        _output(_format_oom_table(report), args.output)
+        output_text(_format_oom_table(report), args.output)
 
     return 0
 

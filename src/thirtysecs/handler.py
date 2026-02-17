@@ -7,7 +7,7 @@ from typing import Any
 from .errors import AppError
 from .http import ApiResponse, json_error, json_ok
 from .logging import configure_logging
-from .metrics import collect_snapshot
+from .core import collect_snapshot
 
 log = logging.getLogger(__name__)
 

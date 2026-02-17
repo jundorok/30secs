@@ -9,16 +9,8 @@ from typing import Any
 
 import psutil
 
+from ..utils import bytes_to_human
 from .base import BaseCollector
-
-
-def _bytes_to_human(n: int) -> str:
-    """Convert bytes to human-readable string."""
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(n) < 1024.0:
-            return f"{n:.2f} {unit}"
-        n = int(n / 1024)
-    return f"{n:.2f} PB"
 
 
 def collect_smaps_rollup(pid: int) -> dict[str, Any] | None:
@@ -54,7 +46,7 @@ def collect_smaps_rollup(pid: int) -> dict[str, Any] | None:
                     continue
                 value_bytes = value_kb * 1024
                 result[key] = value_bytes
-                result[f"{key}_human"] = _bytes_to_human(value_bytes)
+                result[f"{key}_human"] = bytes_to_human(value_bytes)
     except (OSError, PermissionError):
         return None
 
@@ -116,9 +108,9 @@ def get_process_detail(pid: int) -> dict[str, Any] | None:
                 mem_info = proc.memory_info()
                 info["memory"] = {
                     "rss": mem_info.rss,
-                    "rss_human": _bytes_to_human(mem_info.rss),
+                    "rss_human": bytes_to_human(mem_info.rss),
                     "vms": mem_info.vms,
-                    "vms_human": _bytes_to_human(mem_info.vms),
+                    "vms_human": bytes_to_human(mem_info.vms),
                     "percent": round(proc.memory_percent(), 2),
                 }
 
@@ -127,10 +119,10 @@ def get_process_detail(pid: int) -> dict[str, Any] | None:
                     mem_full = proc.memory_full_info()
                     if hasattr(mem_full, "uss"):
                         info["memory"]["uss"] = mem_full.uss
-                        info["memory"]["uss_human"] = _bytes_to_human(mem_full.uss)
+                        info["memory"]["uss_human"] = bytes_to_human(mem_full.uss)
                     if hasattr(mem_full, "pss"):
                         info["memory"]["pss"] = mem_full.pss
-                        info["memory"]["pss_human"] = _bytes_to_human(mem_full.pss)
+                        info["memory"]["pss_human"] = bytes_to_human(mem_full.pss)
                 except (psutil.AccessDenied, AttributeError):
                     pass  # memory_full_info not available, skip USS/PSS
 

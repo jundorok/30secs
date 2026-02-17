@@ -5,17 +5,17 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from thirtysecs.collectors.memory import (
-    _bytes_to_human,
     _parse_psi,
     collect_meminfo_details,
 )
+from thirtysecs.utils import bytes_to_human
 
 
 def test_bytes_to_human() -> None:
-    assert _bytes_to_human(0) == "0.00 B"
-    assert _bytes_to_human(1024) == "1.00 KB"
-    assert _bytes_to_human(1048576) == "1.00 MB"
-    assert _bytes_to_human(1073741824) == "1.00 GB"
+    assert bytes_to_human(0) == "0.00 B"
+    assert bytes_to_human(1024) == "1.00 KB"
+    assert bytes_to_human(1048576) == "1.00 MB"
+    assert bytes_to_human(1073741824) == "1.00 GB"
 
 
 def test_parse_psi_valid(tmp_path) -> None:

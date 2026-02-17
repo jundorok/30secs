@@ -268,18 +268,24 @@ uv run mypy src
 src/thirtysecs/
 ├── __init__.py          # Package init
 ├── __main__.py          # Entry point
-├── cli.py               # CLI entrypoint and parser wiring
-├── leak_report.py       # Leak scoring with linear regression and resource correlation
-├── deep_python.py       # Deep Python tracemalloc analysis
-├── oom.py               # OOM killer event detection (dmesg/journal parsing)
-├── config.py            # Configuration
+├── cli.py               # CLI argument parser wiring
 ├── core.py              # Core snapshot logic
+├── config.py            # Configuration (env vars)
+├── utils.py             # Shared utilities (bytes_to_human, output_text)
 ├── alerts.py            # Alert system with leak detection cooldown
+├── leak_report.py       # Leak scoring with linear regression
+├── deep_python.py       # Deep Python tracemalloc analysis
+├── oom.py               # OOM killer event detection
 ├── errors.py            # Error definitions
-├── logging.py           # Structured logging
+├── logging.py           # Structured JSON logging
+├── handler.py           # AWS Lambda handler
+├── http.py              # HTTP response helpers
 ├── commands/            # Command handlers
-│   ├── leak.py          # `leak` and `leak top` handlers
-│   └── oom.py           # `oom` command handler
+│   ├── snapshot.py      # snapshot / watch / quick handlers
+│   ├── inspect.py       # process inspect handler
+│   ├── leak.py          # leak / leak top handlers
+│   ├── oom.py           # oom command handler
+│   └── health.py        # health / version handlers
 ├── collectors/          # Metric collectors
 │   ├── base.py          # Base collector interface
 │   ├── cpu.py           # CPU metrics

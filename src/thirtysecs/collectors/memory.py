@@ -8,18 +8,10 @@ from typing import Any
 
 import psutil
 
+from ..utils import bytes_to_human
 from .base import BaseCollector
 
 log = logging.getLogger(__name__)
-
-
-def _bytes_to_human(n: int) -> str:
-    """Convert bytes to human-readable string."""
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(n) < 1024.0:
-            return f"{n:.2f} {unit}"
-        n = int(n / 1024)
-    return f"{n:.2f} PB"
 
 
 # ── cgroup helpers ────────────────────────────────────────────────────
@@ -67,11 +59,11 @@ def _read_cgroup_v2_memory() -> dict[str, Any] | None:
     limit = _read_int(base / "memory.max")
     if limit is not None:
         result["limit"] = limit
-        result["limit_human"] = _bytes_to_human(limit)
+        result["limit_human"] = bytes_to_human(limit)
     current = _read_int(base / "memory.current")
     if current is not None:
         result["usage"] = current
-        result["usage_human"] = _bytes_to_human(current)
+        result["usage_human"] = bytes_to_human(current)
         if limit is not None and limit > 0:
             result["percent"] = round(current / limit * 100, 2)
 
@@ -101,10 +93,10 @@ def _read_cgroup_v1_memory() -> dict[str, Any] | None:
     usage = _read_int(base / "memory.usage_in_bytes")
     if limit is not None:
         result["limit"] = limit
-        result["limit_human"] = _bytes_to_human(limit)
+        result["limit_human"] = bytes_to_human(limit)
     if usage is not None:
         result["usage"] = usage
-        result["usage_human"] = _bytes_to_human(usage)
+        result["usage_human"] = bytes_to_human(usage)
         if limit is not None and limit > 0:
             result["percent"] = round(usage / limit * 100, 2)
 
@@ -190,7 +182,7 @@ def collect_meminfo_details() -> dict[str, Any]:
                 # /proc/meminfo reports in kB
                 value_bytes = value_kb * 1024
                 result[key] = value_bytes
-                result[f"{key}_human"] = _bytes_to_human(value_bytes)
+                result[f"{key}_human"] = bytes_to_human(value_bytes)
     except OSError:
         pass
     return result
@@ -210,19 +202,19 @@ class MemoryCollector(BaseCollector):
         data: dict[str, Any] = {
             "virtual": {
                 "total": vm.total,
-                "total_human": _bytes_to_human(vm.total),
+                "total_human": bytes_to_human(vm.total),
                 "available": vm.available,
-                "available_human": _bytes_to_human(vm.available),
+                "available_human": bytes_to_human(vm.available),
                 "used": vm.used,
-                "used_human": _bytes_to_human(vm.used),
+                "used_human": bytes_to_human(vm.used),
                 "free": vm.free,
                 "percent": round(vm.percent, 2),
             },
             "swap": {
                 "total": swap.total,
-                "total_human": _bytes_to_human(swap.total),
+                "total_human": bytes_to_human(swap.total),
                 "used": swap.used,
-                "used_human": _bytes_to_human(swap.used),
+                "used_human": bytes_to_human(swap.used),
                 "free": swap.free,
                 "percent": round(swap.percent, 2),
             },

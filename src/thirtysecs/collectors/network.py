@@ -6,16 +6,8 @@ from typing import Any
 
 import psutil
 
+from ..utils import bytes_to_human
 from .base import BaseCollector
-
-
-def _bytes_to_human(n: int) -> str:
-    """Convert bytes to human-readable string."""
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(n) < 1024.0:
-            return f"{n:.2f} {unit}"
-        n = int(n / 1024)
-    return f"{n:.2f} PB"
 
 
 class NetworkCollector(BaseCollector):
@@ -30,9 +22,9 @@ class NetworkCollector(BaseCollector):
         net_io = psutil.net_io_counters()
         io_stats = {
             "bytes_sent": net_io.bytes_sent,
-            "bytes_sent_human": _bytes_to_human(net_io.bytes_sent),
+            "bytes_sent_human": bytes_to_human(net_io.bytes_sent),
             "bytes_recv": net_io.bytes_recv,
-            "bytes_recv_human": _bytes_to_human(net_io.bytes_recv),
+            "bytes_recv_human": bytes_to_human(net_io.bytes_recv),
             "packets_sent": net_io.packets_sent,
             "packets_recv": net_io.packets_recv,
             "errin": net_io.errin,
